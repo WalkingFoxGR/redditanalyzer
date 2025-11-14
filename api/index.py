@@ -77,19 +77,27 @@ def debug_env():
 def test_bot_import():
     """Test if bot_handler can be imported"""
     try:
+        # Add api directory to path for Vercel
+        api_dir = os.path.dirname(__file__)
+        if api_dir not in sys.path:
+            sys.path.insert(0, api_dir)
+
         # Try to import bot_handler
         from bot_handler import process_update
 
         return jsonify({
             'status': 'ok',
             'bot_handler': 'imported successfully',
-            'process_update': str(type(process_update))
+            'process_update': str(type(process_update)),
+            'api_dir': api_dir
         })
     except Exception as e:
         return jsonify({
             'status': 'error',
             'error': str(e),
-            'error_type': type(e).__name__
+            'error_type': type(e).__name__,
+            'sys_path': sys.path,
+            'current_file': __file__
         }), 500
 
 @app.route('/database-health')
@@ -251,10 +259,17 @@ def telegram_webhook():
 
         # Import bot application
         try:
+            # Add api directory to path for Vercel serverless environment
+            api_dir = os.path.dirname(__file__)
+            if api_dir not in sys.path:
+                sys.path.insert(0, api_dir)
+
             from bot_handler import process_update
             logger.info("Bot handler imported successfully")
         except ImportError as e:
             logger.error(f"Failed to import bot_handler: {e}")
+            logger.error(f"sys.path: {sys.path}")
+            logger.error(f"__file__: {__file__}")
             return jsonify({'ok': False, 'error': 'Import error'}), 500
 
         # Process the update
