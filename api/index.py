@@ -58,6 +58,21 @@ def health():
     """Simple health check"""
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
 
+@app.route('/debug-env')
+def debug_env():
+    """Debug endpoint to check environment variables"""
+    env_status = {
+        'TELEGRAM_BOT_TOKEN': 'SET' if os.getenv('TELEGRAM_BOT_TOKEN') else 'NOT SET',
+        'DATABASE_URL': 'SET' if os.getenv('DATABASE_URL') else 'NOT SET',
+        'OPENAI_API_KEY': 'SET' if os.getenv('OPENAI_API_KEY') else 'NOT SET',
+        'STRIPE_SECRET_KEY': 'SET' if os.getenv('STRIPE_SECRET_KEY') else 'NOT SET',
+    }
+    return jsonify({
+        'status': 'ok',
+        'environment_variables': env_status,
+        'python_version': sys.version
+    })
+
 @app.route('/database-health')
 def database_health():
     """Check database connectivity"""
