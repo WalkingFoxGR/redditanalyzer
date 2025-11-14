@@ -20,13 +20,21 @@ from telegram.ext import (
 from telegram.constants import ParseMode
 import stripe
 
+# Setup logging first
+logger = logging.getLogger(__name__)
+
 # Add lib directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lib'))
 
-from database import Database
-from payment import PaymentProcessor
+# Use Supabase database for Vercel compatibility
+try:
+    from database_supabase import SupabaseDatabase as Database
+    logger.info("Using Supabase REST API for database")
+except ImportError:
+    from database import Database
+    logger.info("Using asyncpg for database")
 
-logger = logging.getLogger(__name__)
+from payment import PaymentProcessor
 
 # Initialize components
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
@@ -45,8 +53,8 @@ async def init_application():
         # Create application
         application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-        # Initialize database
-        db = Database(DATABASE_URL)
+        # Initialize database (Supabase doesn't need DATABASE_URL parameter)
+        db = Database()
         await db.init_pool()
 
         # Register handlers

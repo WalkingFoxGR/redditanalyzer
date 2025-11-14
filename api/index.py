@@ -16,7 +16,13 @@ from telegram.ext import Application
 # Add lib directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lib'))
 
-from database import Database
+# Use Supabase database for Vercel compatibility
+try:
+    from database_supabase import SupabaseDatabase as Database
+    logger.info("Using Supabase REST API for database")
+except ImportError:
+    from database import Database
+    logger.info("Using asyncpg for database")
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
