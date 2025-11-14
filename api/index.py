@@ -73,6 +73,25 @@ def debug_env():
         'python_version': sys.version
     })
 
+@app.route('/test-bot-import')
+def test_bot_import():
+    """Test if bot_handler can be imported"""
+    try:
+        # Try to import bot_handler
+        from bot_handler import process_update
+
+        return jsonify({
+            'status': 'ok',
+            'bot_handler': 'imported successfully',
+            'process_update': str(type(process_update))
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'error_type': type(e).__name__
+        }), 500
+
 @app.route('/database-health')
 def database_health():
     """Check database connectivity"""
@@ -220,28 +239,45 @@ def stripe_webhook():
 @app.route('/webhook', methods=['POST'])
 def telegram_webhook():
     """Handle Telegram bot webhooks"""
+    loop = None
     try:
         # Get the webhook update
         update_data = request.get_json()
-        logger.info(f"Received Telegram webhook: {update_data}")
+        logger.info(f"Received Telegram webhook update")
 
-        # Process the update
+        # Create and set event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         # Import bot application
-        from bot_handler import process_update
+        try:
+            from bot_handler import process_update
+            logger.info("Bot handler imported successfully")
+        except ImportError as e:
+            logger.error(f"Failed to import bot_handler: {e}")
+            return jsonify({'ok': False, 'error': 'Import error'}), 500
 
         # Process the update
+        logger.info("Processing update...")
         result = loop.run_until_complete(
             process_update(update_data)
         )
+        logger.info(f"Update processed successfully: {result}")
 
         return jsonify({'ok': True}), 200
 
     except Exception as e:
-        logger.error(f"Error processing webhook: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error processing webhook: {e}", exc_info=True)
+        # Return 200 to prevent Telegram from retrying
+        # Log the error but don't fail the webhook
+        return jsonify({'ok': True, 'error_logged': str(e)}), 200
+    finally:
+        # Clean up event loop
+        if loop:
+            try:
+                loop.close()
+            except:
+                pass
 
 # ========== USER & COIN MANAGEMENT ENDPOINTS ==========
 
