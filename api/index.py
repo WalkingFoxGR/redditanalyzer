@@ -348,18 +348,6 @@ def get_all_users():
         logger.error(f"Error getting users: {e}")
         return jsonify({'error': str(e)}), 500
 
-# For Vercel, we need to export the app
-# Vercel will call this handler for each request
-def handler(request):
-    """Vercel serverless function handler"""
-    with app.request_context(request.environ):
-        try:
-            response = app.full_dispatch_request()
-        except Exception as e:
-            logger.error(f"Request error: {e}")
-            response = jsonify({'error': 'Internal server error'}), 500
-        return response
-
 # For local development
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
