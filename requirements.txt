@@ -1,0 +1,29 @@
+# Web Framework
+Flask==3.0.3
+flask-cors==4.0.0
+
+# Telegram Bot
+python-telegram-bot>=20.7
+
+# Database
+asyncpg==0.29.0
+
+# Payment Processing
+stripe>=7.0.0
+
+# Reddit API
+praw==7.7.1
+
+# HTTP & Async
+aiohttp>=3.9.0
+requests>=2.31.0
+
+# OpenAI (if using AI features)
+openai>=1.12.0
+
+# Utilities
+python-dotenv>=1.0.0
+pytz==2024.1
+
+# Data Tables (optional - for payment tracking)
+pyairtable>=2.0.0
