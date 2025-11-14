@@ -23,19 +23,46 @@ class Database:
 
         self.pool = None
         self._lock = asyncio.Lock()
+        self._is_serverless = os.getenv('VERCEL') or os.getenv('AWS_LAMBDA_FUNCTION_NAME')
 
     async def init_pool(self):
-        """Initialize connection pool"""
+        """Initialize connection pool (or single connection for serverless)"""
         if not self.pool:
             async with self._lock:
                 if not self.pool:
-                    self.pool = await asyncpg.create_pool(
-                        self.database_url,
-                        min_size=1,
-                        max_size=10,
-                        command_timeout=60
-                    )
-                    await self._init_db()
+                    try:
+                        if self._is_serverless:
+                            # For serverless: use single connection with specific settings
+                            logger.info("Serverless environment detected, using optimized connection")
+                            import ssl
+                            # Create SSL context for Supabase
+                            ssl_context = ssl.create_default_context()
+                            ssl_context.check_hostname = False
+                            ssl_context.verify_mode = ssl.CERT_NONE
+
+                            self.pool = await asyncpg.create_pool(
+                                self.database_url,
+                                min_size=1,
+                                max_size=1,
+                                command_timeout=10,
+                                timeout=10,
+                                ssl=ssl_context,
+                                server_settings={
+                                    'application_name': 'reddit_bot_vercel'
+                                }
+                            )
+                        else:
+                            # For regular deployment: use standard pool
+                            self.pool = await asyncpg.create_pool(
+                                self.database_url,
+                                min_size=1,
+                                max_size=10,
+                                command_timeout=60
+                            )
+                        await self._init_db()
+                    except Exception as e:
+                        logger.error(f"Failed to create connection pool: {e}")
+                        raise
 
     async def close_pool(self):
         """Close connection pool"""
