@@ -77,6 +77,11 @@ def debug_env():
         'DATABASE_URL': 'SET' if os.getenv('DATABASE_URL') else 'NOT SET',
         'OPENAI_API_KEY': 'SET' if os.getenv('OPENAI_API_KEY') else 'NOT SET',
         'STRIPE_SECRET_KEY': 'SET' if os.getenv('STRIPE_SECRET_KEY') else 'NOT SET',
+        'REDDIT_CLIENT_ID': 'SET' if os.getenv('REDDIT_CLIENT_ID') else 'NOT SET',
+        'REDDIT_CLIENT_SECRET': 'SET' if os.getenv('REDDIT_CLIENT_SECRET') else 'NOT SET',
+        'REDDIT_USER_AGENT': 'SET' if os.getenv('REDDIT_USER_AGENT') else 'NOT SET',
+        'SUPABASE_URL': 'SET' if os.getenv('SUPABASE_URL') else 'NOT SET',
+        'SUPABASE_ANON_KEY': 'SET' if os.getenv('SUPABASE_ANON_KEY') else 'NOT SET',
     }
     return jsonify({
         'status': 'ok',
