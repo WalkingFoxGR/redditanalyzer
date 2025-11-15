@@ -13,6 +13,10 @@ from datetime import datetime, timedelta
 from telegram import Update, Bot
 from telegram.ext import Application
 
+# Setup logging first
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Add lib directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lib'))
 
@@ -25,8 +29,6 @@ except ImportError:
     logger.info("Using asyncpg for database")
 
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Initialize Stripe
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
