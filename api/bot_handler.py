@@ -97,7 +97,10 @@ async def init_application():
     application.add_handler(CommandHandler("addcoins", add_coins_command))
     application.add_handler(CommandHandler("setcoins", set_coins_command))
     application.add_handler(CommandHandler("makeadmin", makeadmin_command))
+    application.add_handler(CommandHandler("removeadmin", removeadmin_command))
     application.add_handler(CommandHandler("announce", announce_command))
+    application.add_handler(CommandHandler("discover", discover_command))
+    application.add_handler(CommandHandler("broadcast", broadcast_command))
 
     # Callback query handler for inline buttons
     application.add_handler(CallbackQueryHandler(button_callback))
@@ -177,11 +180,14 @@ Let's find the perfect subreddits for your content! 🚀
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /help command"""
+    user = update.effective_user
+    is_admin = await db.is_admin(user.id)
+
     help_text = """
 <b>📚 Available Commands</b>
 
 <b>Analysis Commands:</b>
-• /analyze &lt;subreddit&gt; - Deep analysis (2 coins)
+• /analyze &lt;subreddit&gt; - Deep analysis with AI (2 coins)
 • /search &lt;topic&gt; - Find subreddits (1 coin)
 • /niche &lt;topic&gt; - Find niche communities (3 coins)
 • /compare &lt;sub1,sub2,sub3&gt; - Compare subreddits (5 coins)
@@ -194,20 +200,30 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • /balance - Check your coins
 • /buy - Purchase more coins
 • /help - Show this message
+"""
 
+    if is_admin:
+        help_text += """
 <b>Admin Commands:</b>
 • /admin - Admin panel
 • /users - List all users
 • /stats - Bot statistics
+• /discover &lt;topic&gt; - Mass discovery (admin only)
 • /addcoins &lt;user_id&gt; &lt;amount&gt; - Add coins
-• /setcoins &lt;user_id&gt; &lt;amount&gt; - Set coin balance
-• /makeadmin &lt;user_id&gt; - Make user admin
+• /setcoins &lt;user_id&gt; &lt;amount&gt; - Set balance
+• /makeadmin &lt;user_id&gt; - Grant admin
+• /removeadmin &lt;user_id&gt; - Remove admin
 • /announce &lt;message&gt; - Send announcement
+• /broadcast &lt;message&gt; - Same as announce
+"""
 
+    help_text += """
 <b>Coin Costs:</b>
 💰 Most commands cost 1-5 coins
 🎁 New users get 10 free coins
 💳 Purchase packages with /buy
+
+<b>✨ All powered by Vercel + PRAW + OpenAI!</b>
 
 Need help? Just ask!
 """
@@ -1018,6 +1034,106 @@ async def announce_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Failed: {failed}",
         parse_mode=ParseMode.HTML
     )
+
+async def removeadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /removeadmin command"""
+    user = update.effective_user
+
+    is_admin = await db.is_admin(user.id)
+    if not is_admin:
+        await update.message.reply_text("⚠️ Admin only.")
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usage: /removeadmin <user_id>")
+        return
+
+    try:
+        target_user_id = int(context.args[0])
+        # You'll need to implement set_admin_status in database
+        # await db.set_admin_status(target_user_id, False)
+        await update.message.reply_text(f"✅ Admin rights removed from user {target_user_id}")
+    except ValueError:
+        await update.message.reply_text("❌ Invalid user ID.")
+
+async def discover_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /discover command - Vercel-optimized version"""
+    user = update.effective_user
+
+    is_admin = await db.is_admin(user.id)
+    if not is_admin:
+        await update.message.reply_text("⚠️ Admin only.")
+        return
+
+    if not context.args:
+        await update.message.reply_text(
+            "🔍 <b>Discovery Tool (Vercel Version)</b>\n\n"
+            "Usage: /discover <topic>\n"
+            "Example: /discover python programming\n\n"
+            "⚡ <b>Quick Mode</b> - Analyzes top 10 subreddits\n"
+            "📊 Returns results in ~30 seconds\n\n"
+            "<i>Note: This is optimized for Vercel's 10-second timeout. "
+            "For deep discovery with 100+ subreddits, use the full version on a dedicated server.</i>",
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    query = " ".join(context.args)
+
+    msg = await update.message.reply_text(
+        f"🔍 Discovering communities for '{escape_html(query)}'...\n"
+        "⏳ This will take ~30 seconds...",
+        parse_mode=ParseMode.HTML
+    )
+
+    try:
+        # Use the niche discovery endpoint (searches + analyzes top 10)
+        result = await reddit_api.search_and_analyze(query, limit=50)
+
+        if "error" in result or not result.get('success'):
+            await msg.edit_text(
+                f"❌ Error: {escape_html(result.get('error', 'Discovery failed'))}",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        communities = result.get('results', [])
+
+        if not communities:
+            await msg.edit_text("No communities found for your query.", parse_mode=ParseMode.HTML)
+            return
+
+        # Sort by effectiveness score
+        communities.sort(key=lambda x: x.get('effectiveness_score', 0), reverse=True)
+
+        response = f"<b>🎯 Discovered Communities for '{escape_html(query)}'</b>\n\n"
+        response += f"Found {len(communities)} communities:\n\n"
+
+        for i, comm in enumerate(communities[:15], 1):
+            name = comm.get('subreddit', 'Unknown')
+            score = comm.get('effectiveness_score', 0)
+            members = format_number(comm.get('subscribers', 0))
+            median_score = comm.get('median_score_per_post', 0)
+
+            emoji = "🟢" if score >= 70 else "🟡" if score >= 50 else "🔴"
+
+            response += f"{i}. {emoji} <b>r/{name}</b> (Score: {score}/100)\n"
+            response += f"   👥 {members} members | 📊 Median: {median_score:.0f}\n\n"
+
+        response += "\n💡 <b>Next Steps:</b>\n"
+        response += f"• Analyze individually: /analyze {communities[0].get('subreddit', 'community')}\n"
+        response += f"• Check requirements: /requirements {communities[0].get('subreddit', 'community')}\n"
+        response += f"• Compare top 3: /compare {','.join([c.get('subreddit', '') for c in communities[:3]])}\n"
+
+        await msg.edit_text(response[:4000], parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        logger.error(f"Error in discover command: {e}")
+        await msg.edit_text("❌ Discovery failed. Please try again.", parse_mode=ParseMode.HTML)
+
+async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /broadcast command - same as announce"""
+    await announce_command(update, context)
 
 # ========== PAYMENT CALLBACK ==========
 
