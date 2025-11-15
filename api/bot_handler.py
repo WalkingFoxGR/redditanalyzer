@@ -78,9 +78,10 @@ async def init_application():
     # Callback query handler for inline buttons
     application.add_handler(CallbackQueryHandler(button_callback))
 
-    # Initialize application
+    # Initialize application (webhook mode - don't start update fetcher)
     await application.initialize()
-    await application.start()
+    # Note: Don't call await application.start() for webhook mode
+    # It starts background tasks that cause event loop errors
 
     return application
 
