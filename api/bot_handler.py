@@ -49,35 +49,38 @@ async def init_application():
     """Initialize bot application"""
     global application, db
 
-    if application is None:
-        # Create application
-        application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    # For serverless: always create new application to avoid event loop conflicts
+    # Each request gets its own event loop, so we can't reuse the application
 
-        # Initialize database (Supabase doesn't need DATABASE_URL parameter)
+    # Create application
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+    # Initialize database (Supabase doesn't need DATABASE_URL parameter)
+    if db is None:
         db = Database()
         await db.init_pool()
 
-        # Register handlers
-        application.add_handler(CommandHandler("start", start_command))
-        application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(CommandHandler("balance", balance_command))
-        application.add_handler(CommandHandler("buy", buy_command))
-        application.add_handler(CommandHandler("analyze", analyze_command))
-        application.add_handler(CommandHandler("search", search_command))
-        application.add_handler(CommandHandler("niche", niche_command))
-        application.add_handler(CommandHandler("rules", rules_command))
-        application.add_handler(CommandHandler("requirements", requirements_command))
-        application.add_handler(CommandHandler("compare", compare_command))
-        application.add_handler(CommandHandler("admin", admin_command))
-        application.add_handler(CommandHandler("users", users_command))
-        application.add_handler(CommandHandler("stats", stats_command))
+    # Register handlers
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("balance", balance_command))
+    application.add_handler(CommandHandler("buy", buy_command))
+    application.add_handler(CommandHandler("analyze", analyze_command))
+    application.add_handler(CommandHandler("search", search_command))
+    application.add_handler(CommandHandler("niche", niche_command))
+    application.add_handler(CommandHandler("rules", rules_command))
+    application.add_handler(CommandHandler("requirements", requirements_command))
+    application.add_handler(CommandHandler("compare", compare_command))
+    application.add_handler(CommandHandler("admin", admin_command))
+    application.add_handler(CommandHandler("users", users_command))
+    application.add_handler(CommandHandler("stats", stats_command))
 
-        # Callback query handler for inline buttons
-        application.add_handler(CallbackQueryHandler(button_callback))
+    # Callback query handler for inline buttons
+    application.add_handler(CallbackQueryHandler(button_callback))
 
-        # Initialize application
-        await application.initialize()
-        await application.start()
+    # Initialize application
+    await application.initialize()
+    await application.start()
 
     return application
 
