@@ -152,6 +152,25 @@ def get_reddit_scraper():
         reddit_scraper = RedditScraper()
     return reddit_scraper
 
+def run_async(coro):
+    """Helper to run async code in Flask synchronous context with proper cleanup"""
+    loop = None
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(coro)
+    finally:
+        if loop:
+            try:
+                # Clean up any pending tasks
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+                # Close the loop properly
+                loop.close()
+            except Exception as e:
+                logger.warning(f"Error closing event loop: {e}")
+
 @app.route('/reddit/analyze', methods=['POST'])
 def reddit_analyze():
     """Analyze a subreddit"""
@@ -163,11 +182,8 @@ def reddit_analyze():
         if not subreddit:
             return jsonify({'error': 'Subreddit name required'}), 400
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
         scraper = get_reddit_scraper()
-        result = loop.run_until_complete(scraper.analyze_subreddit(subreddit, days))
+        result = run_async(scraper.analyze_subreddit(subreddit, days))
 
         return jsonify(result)
 
@@ -186,11 +202,8 @@ def reddit_search():
         if not query:
             return jsonify({'error': 'Query required'}), 400
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
         scraper = get_reddit_scraper()
-        result = loop.run_until_complete(scraper.search_subreddits(query, limit))
+        result = run_async(scraper.search_subreddits(query, limit))
 
         return jsonify(result)
 
@@ -210,33 +223,32 @@ def reddit_search_and_analyze():
         if not query:
             return jsonify({'error': 'Query required'}), 400
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        async def search_and_analyze_async():
+            scraper = get_reddit_scraper()
 
-        scraper = get_reddit_scraper()
+            # Search for subreddits
+            search_result = await scraper.search_subreddits(query, limit)
 
-        # Search for subreddits
-        search_result = loop.run_until_complete(scraper.search_subreddits(query, limit))
+            if not search_result.get('success'):
+                return search_result
 
-        if not search_result.get('success'):
-            return jsonify(search_result)
+            # Analyze top subreddits
+            subreddits = search_result['results'][:10]  # Analyze top 10
+            analyzed = []
 
-        # Analyze top subreddits
-        subreddits = search_result['results'][:10]  # Analyze top 10
-        analyzed = []
+            for sub in subreddits:
+                analysis = await scraper.analyze_subreddit(sub['display_name'], days)
+                if analysis.get('success'):
+                    analyzed.append(analysis)
 
-        for sub in subreddits:
-            analysis = loop.run_until_complete(
-                scraper.analyze_subreddit(sub['display_name'], days)
-            )
-            if analysis.get('success'):
-                analyzed.append(analysis)
+            return {
+                'success': True,
+                'results': analyzed,
+                'count': len(analyzed)
+            }
 
-        return jsonify({
-            'success': True,
-            'results': analyzed,
-            'count': len(analyzed)
-        })
+        result = run_async(search_and_analyze_async())
+        return jsonify(result)
 
     except Exception as e:
         logger.error(f"Error in search and analyze: {e}")
@@ -255,22 +267,23 @@ def reddit_analyze_multiple():
         if not subreddits:
             return jsonify({'error': 'Subreddits required'}), 400
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        async def analyze_multiple_async():
+            scraper = get_reddit_scraper()
+            results = []
 
-        scraper = get_reddit_scraper()
-        results = []
+            for subreddit in subreddits:
+                result = await scraper.analyze_subreddit(subreddit, days)
+                if result.get('success'):
+                    results.append(result)
 
-        for subreddit in subreddits:
-            result = loop.run_until_complete(scraper.analyze_subreddit(subreddit, days))
-            if result.get('success'):
-                results.append(result)
+            return {
+                'success': True,
+                'results': results,
+                'count': len(results)
+            }
 
-        return jsonify({
-            'success': True,
-            'results': results,
-            'count': len(results)
-        })
+        result = run_async(analyze_multiple_async())
+        return jsonify(result)
 
     except Exception as e:
         logger.error(f"Error in analyze multiple: {e}")
@@ -286,11 +299,8 @@ def reddit_rules():
         if not subreddit:
             return jsonify({'error': 'Subreddit name required'}), 400
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
         scraper = get_reddit_scraper()
-        result = loop.run_until_complete(scraper.get_rules(subreddit))
+        result = run_async(scraper.get_rules(subreddit))
 
         return jsonify(result)
 
@@ -308,11 +318,8 @@ def reddit_requirements():
         if not subreddit:
             return jsonify({'error': 'Subreddit name required'}), 400
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
         scraper = get_reddit_scraper()
-        result = loop.run_until_complete(scraper.analyze_requirements(subreddit))
+        result = run_async(scraper.analyze_requirements(subreddit))
 
         return jsonify(result)
 
@@ -330,11 +337,8 @@ def reddit_flairs():
         if not subreddit:
             return jsonify({'error': 'Subreddit name required'}), 400
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
         scraper = get_reddit_scraper()
-        result = loop.run_until_complete(scraper.analyze_flairs(subreddit))
+        result = run_async(scraper.analyze_flairs(subreddit))
 
         return jsonify(result)
 
@@ -355,11 +359,8 @@ def reddit_scrape():
         if not subreddit:
             return jsonify({'error': 'Subreddit name required'}), 400
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
         scraper = get_reddit_scraper()
-        result = loop.run_until_complete(scraper.scrape_posts(subreddit, limit, sort, time_filter))
+        result = run_async(scraper.scrape_posts(subreddit, limit, sort, time_filter))
 
         return jsonify(result)
 
