@@ -57,31 +57,53 @@ class SupabaseDatabase:
     async def add_user(self, user_id: int, username: str = None,
                       first_name: str = None, last_name: str = None,
                       added_by: int = None) -> bool:
-        """Add a new user with initial free coins"""
+        """Add a new user with initial free coins (or update existing user profile)"""
         try:
-            initial_coins = int(os.getenv('INITIAL_FREE_COINS', '10'))
-            expiry_days = int(os.getenv('COINS_EXPIRY_DAYS', '30'))
-            expiry_date = (datetime.now() + timedelta(days=expiry_days)).isoformat()
+            # Check if user already exists
+            existing = self.client.table('users')\
+                .select('user_id, coin_balance')\
+                .eq('user_id', user_id)\
+                .execute()
 
-            data = {
-                'user_id': user_id,
-                'username': username,
-                'first_name': first_name,
-                'last_name': last_name,
-                'added_by': added_by,
-                'coin_balance': initial_coins,
-                'coins_expire_at': expiry_date,
-                'free_coins_claimed': True
-            }
+            if existing.data:
+                # User exists - only update profile info, NOT coins
+                update_data = {
+                    'username': username,
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'is_active': True,
+                    'last_seen': datetime.now().isoformat()
+                }
 
-            # Upsert user
-            result = self.client.table('users').upsert(
-                data,
-                on_conflict='user_id'
-            ).execute()
+                self.client.table('users')\
+                    .update(update_data)\
+                    .eq('user_id', user_id)\
+                    .execute()
 
-            logger.info(f"User {user_id} added with {initial_coins} coins")
-            return True
+                logger.info(f"User {user_id} profile updated")
+                return True
+
+            else:
+                # New user - add with initial coins
+                initial_coins = int(os.getenv('INITIAL_FREE_COINS', '10'))
+                expiry_days = int(os.getenv('COINS_EXPIRY_DAYS', '30'))
+                expiry_date = (datetime.now() + timedelta(days=expiry_days)).isoformat()
+
+                data = {
+                    'user_id': user_id,
+                    'username': username,
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'added_by': added_by,
+                    'coin_balance': initial_coins,
+                    'coins_expire_at': expiry_date,
+                    'free_coins_claimed': True
+                }
+
+                self.client.table('users').insert(data).execute()
+
+                logger.info(f"User {user_id} added with {initial_coins} coins")
+                return True
 
         except Exception as e:
             logger.error(f"Error adding user: {e}")
