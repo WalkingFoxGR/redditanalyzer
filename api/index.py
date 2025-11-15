@@ -28,6 +28,9 @@ except ImportError:
     from database import Database
     logger.info("Using asyncpg for database")
 
+# Import Reddit scraper
+from reddit_scraper import RedditScraper
+
 app = Flask(__name__)
 
 # Initialize Stripe
@@ -131,6 +134,233 @@ def database_health():
             'database': 'disconnected',
             'error': str(e)
         }), 500
+
+# ========== REDDIT API ENDPOINTS ==========
+
+# Initialize Reddit scraper (lazy initialization)
+reddit_scraper = None
+
+def get_reddit_scraper():
+    """Get or create Reddit scraper instance"""
+    global reddit_scraper
+    if reddit_scraper is None:
+        reddit_scraper = RedditScraper()
+    return reddit_scraper
+
+@app.route('/reddit/analyze', methods=['POST'])
+def reddit_analyze():
+    """Analyze a subreddit"""
+    try:
+        data = request.get_json()
+        subreddit = data.get('subreddit')
+        days = data.get('days', 7)
+
+        if not subreddit:
+            return jsonify({'error': 'Subreddit name required'}), 400
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        scraper = get_reddit_scraper()
+        result = loop.run_until_complete(scraper.analyze_subreddit(subreddit, days))
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Error in reddit analyze: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/reddit/search', methods=['POST'])
+def reddit_search():
+    """Search for subreddits"""
+    try:
+        data = request.get_json()
+        query = data.get('query')
+        limit = data.get('limit', 100)
+
+        if not query:
+            return jsonify({'error': 'Query required'}), 400
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        scraper = get_reddit_scraper()
+        result = loop.run_until_complete(scraper.search_subreddits(query, limit))
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Error in reddit search: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/reddit/search-and-analyze', methods=['POST'])
+def reddit_search_and_analyze():
+    """Search and analyze subreddits (niche discovery)"""
+    try:
+        data = request.get_json()
+        query = data.get('query')
+        limit = data.get('limit', 100)
+        days = data.get('days', 7)
+
+        if not query:
+            return jsonify({'error': 'Query required'}), 400
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        scraper = get_reddit_scraper()
+
+        # Search for subreddits
+        search_result = loop.run_until_complete(scraper.search_subreddits(query, limit))
+
+        if not search_result.get('success'):
+            return jsonify(search_result)
+
+        # Analyze top subreddits
+        subreddits = search_result['results'][:10]  # Analyze top 10
+        analyzed = []
+
+        for sub in subreddits:
+            analysis = loop.run_until_complete(
+                scraper.analyze_subreddit(sub['display_name'], days)
+            )
+            if analysis.get('success'):
+                analyzed.append(analysis)
+
+        return jsonify({
+            'success': True,
+            'results': analyzed,
+            'count': len(analyzed)
+        })
+
+    except Exception as e:
+        logger.error(f"Error in search and analyze: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/reddit/analyze-multiple', methods=['POST'])
+def reddit_analyze_multiple():
+    """Analyze multiple subreddits for comparison"""
+    try:
+        data = request.get_json()
+        subreddits_str = data.get('subreddits', '')
+        days = data.get('days', 7)
+
+        subreddits = [s.strip() for s in subreddits_str.split(',')]
+
+        if not subreddits:
+            return jsonify({'error': 'Subreddits required'}), 400
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        scraper = get_reddit_scraper()
+        results = []
+
+        for subreddit in subreddits:
+            result = loop.run_until_complete(scraper.analyze_subreddit(subreddit, days))
+            if result.get('success'):
+                results.append(result)
+
+        return jsonify({
+            'success': True,
+            'results': results,
+            'count': len(results)
+        })
+
+    except Exception as e:
+        logger.error(f"Error in analyze multiple: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/reddit/rules', methods=['POST'])
+def reddit_rules():
+    """Get subreddit rules"""
+    try:
+        data = request.get_json()
+        subreddit = data.get('subreddit')
+
+        if not subreddit:
+            return jsonify({'error': 'Subreddit name required'}), 400
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        scraper = get_reddit_scraper()
+        result = loop.run_until_complete(scraper.get_rules(subreddit))
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Error getting rules: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/reddit/requirements', methods=['POST'])
+def reddit_requirements():
+    """Analyze posting requirements"""
+    try:
+        data = request.get_json()
+        subreddit = data.get('subreddit')
+
+        if not subreddit:
+            return jsonify({'error': 'Subreddit name required'}), 400
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        scraper = get_reddit_scraper()
+        result = loop.run_until_complete(scraper.analyze_requirements(subreddit))
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Error analyzing requirements: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/reddit/flairs', methods=['POST'])
+def reddit_flairs():
+    """Analyze flair performance"""
+    try:
+        data = request.get_json()
+        subreddit = data.get('subreddit')
+
+        if not subreddit:
+            return jsonify({'error': 'Subreddit name required'}), 400
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        scraper = get_reddit_scraper()
+        result = loop.run_until_complete(scraper.analyze_flairs(subreddit))
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Error analyzing flairs: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/reddit/scrape', methods=['POST'])
+def reddit_scrape():
+    """Scrape posts from subreddit"""
+    try:
+        data = request.get_json()
+        subreddit = data.get('subreddit')
+        limit = data.get('limit', 50)
+        sort = data.get('sort', 'hot')
+        time_filter = data.get('time_filter', 'week')
+
+        if not subreddit:
+            return jsonify({'error': 'Subreddit name required'}), 400
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        scraper = get_reddit_scraper()
+        result = loop.run_until_complete(scraper.scrape_posts(subreddit, limit, sort, time_filter))
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Error scraping posts: {e}")
+        return jsonify({'error': str(e)}), 500
 
 # ========== STRIPE WEBHOOK ENDPOINT ==========
 

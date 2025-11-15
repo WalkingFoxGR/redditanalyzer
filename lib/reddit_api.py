@@ -101,7 +101,7 @@ class RedditAPI:
         """Analyze a single subreddit"""
         return await self._make_request(
             "POST",
-            "/analyze",
+            "/reddit/analyze",
             {"subreddit": subreddit, "days": days},
             timeout=400
         )
@@ -110,34 +110,34 @@ class RedditAPI:
         """Search for subreddits"""
         return await self._make_request(
             "POST",
-            "/search",
+            "/reddit/search",
             {"query": query, "limit": limit}
         )
-        
-    async def search_and_analyze(self, query: str, limit: int = 100, 
+
+    async def search_and_analyze(self, query: str, limit: int = 100,
                                 days: int = 7) -> Dict[str, Any]:
         """Search and analyze subreddits (niche)"""
         return await self._make_request(
             "POST",
-            "/search-and-analyze",
+            "/reddit/search-and-analyze",
             {"query": query, "limit": limit, "days": days}
         )
-        
+
     async def analyze_multiple(self, subreddits: str, days: int = 7) -> Dict[str, Any]:
         """Analyze multiple subreddits for comparison"""
         return await self._make_request(
             "POST",
-            "/analyze-multiple",
+            "/reddit/analyze-multiple",
             {"subreddits": subreddits, "days": days},
             timeout=400
         )
-        
-    async def scrape_posts(self, subreddit: str, limit: int, 
+
+    async def scrape_posts(self, subreddit: str, limit: int,
                           sort: str, time_filter: str) -> Dict[str, Any]:
         """Scrape posts from a subreddit"""
         return await self._make_request(
             "POST",
-            "/scrape",
+            "/reddit/scrape",
             {
                 "subreddit": subreddit,
                 "limit": limit,
@@ -145,29 +145,29 @@ class RedditAPI:
                 "time_filter": time_filter
             }
         )
-        
+
     async def get_rules(self, subreddit: str) -> Dict[str, Any]:
         """Get subreddit rules"""
         return await self._make_request(
             "POST",
-            "/rules",
+            "/reddit/rules",
             {"subreddit": subreddit}
         )
-        
+
     async def analyze_flairs(self, subreddit: str) -> Dict[str, Any]:
         """Analyze flair performance"""
         return await self._make_request(
             "POST",
-            "/flairs",
+            "/reddit/flairs",
             {"subreddit": subreddit}
         )
-        
-    async def analyze_requirements(self, subreddit: str, 
+
+    async def analyze_requirements(self, subreddit: str,
                                   post_limit: int = 150) -> Dict[str, Any]:
         """Analyze posting requirements"""
         return await self._make_request(
             "POST",
-            "/requirements",
+            "/reddit/requirements",
             {"subreddit": subreddit, "post_limit": post_limit},
             timeout=400
         )

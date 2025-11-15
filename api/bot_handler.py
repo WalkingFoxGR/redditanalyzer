@@ -43,7 +43,9 @@ from utils import format_number, escape_html
 
 # Initialize components
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-REDDIT_API_URL = os.getenv('REDDIT_API_URL', 'https://reddit-analyzer-api.onrender.com')
+# Use Vercel deployment URL or localhost for Reddit API
+VERCEL_URL = os.getenv('VERCEL_URL', 'https://redditanalyzer-kappa.vercel.app')
+REDDIT_API_URL = os.getenv('REDDIT_API_URL', VERCEL_URL)
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 
