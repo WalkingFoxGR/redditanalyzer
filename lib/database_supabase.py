@@ -286,15 +286,22 @@ class SupabaseDatabase:
                 new_expiry = (datetime.now() + timedelta(days=expiry_days)).isoformat()
                 update_data['coins_expire_at'] = new_expiry
 
-            self.client.table('users')\
+            result = self.client.table('users')\
                 .update(update_data)\
                 .eq('user_id', user_id)\
                 .execute()
 
-            return True
+            # Check if update was successful
+            if result.data:
+                logger.info(f"Successfully added {amount} coins to user {user_id}. New balance: {new_balance}")
+                return True
+            else:
+                logger.warning(f"Update returned no data for user {user_id}. May be RLS issue.")
+                logger.warning(f"Result: {result}")
+                return False
 
         except Exception as e:
-            logger.error(f"Error adding coins: {e}")
+            logger.error(f"Error adding coins: {e}", exc_info=True)
             return False
 
     async def get_all_users(self) -> List[Dict[str, Any]]:

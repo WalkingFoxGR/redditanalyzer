@@ -294,13 +294,8 @@ def telegram_webhook():
         # Return 200 to prevent Telegram from retrying
         # Log the error but don't fail the webhook
         return jsonify({'ok': True, 'error_logged': str(e)}), 200
-    finally:
-        # Clean up event loop
-        if loop:
-            try:
-                loop.close()
-            except:
-                pass
+    # Note: Don't close event loop - it causes "Event loop is closed" errors
+    # The loop will be garbage collected after the function returns
 
 # ========== USER & COIN MANAGEMENT ENDPOINTS ==========
 
