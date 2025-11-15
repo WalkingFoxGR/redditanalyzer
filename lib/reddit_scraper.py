@@ -34,11 +34,11 @@ class RedditScraper:
             # Get subreddit info
             subscribers = subreddit.subscribers
 
-            # Collect posts
+            # Collect posts (reduced to 100 for speed on Vercel)
             posts = []
             cutoff_time = datetime.now() - timedelta(days=days)
 
-            for post in subreddit.hot(limit=200):
+            for post in subreddit.hot(limit=100):
                 post_time = datetime.fromtimestamp(post.created_utc)
                 if post_time < cutoff_time:
                     continue
