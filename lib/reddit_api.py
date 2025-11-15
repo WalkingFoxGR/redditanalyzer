@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 
 class RedditAPI:
     def __init__(self, base_url: str):
+        # Ensure URL has protocol
+        if not base_url.startswith(('http://', 'https://')):
+            base_url = f'https://{base_url}'
         self.base_url = base_url.rstrip('/')
         self._session = None
         self._lock = asyncio.Lock()
