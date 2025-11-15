@@ -53,59 +53,72 @@ application = None
 db = None
 reddit_api = None
 ai_analyzer = None
+_app_initialized = False
 
 async def init_application():
-    """Initialize bot application"""
-    global application, db, reddit_api, ai_analyzer
+    """Initialize bot application (cached for performance)"""
+    global application, db, reddit_api, ai_analyzer, _app_initialized
 
-    # For serverless: always create new application to avoid event loop conflicts
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    # Return cached application if already initialized
+    if application is not None and _app_initialized:
+        return application
+
+    # Build application once
+    if application is None:
+        logger.info("Building new Telegram application...")
+        application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+        # ===== BASIC COMMANDS =====
+        application.add_handler(CommandHandler("start", start_command))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("balance", balance_command))
+        application.add_handler(CommandHandler("buy", buy_command))
+
+        # ===== ANALYSIS COMMANDS =====
+        application.add_handler(CommandHandler("analyze", analyze_command))
+        application.add_handler(CommandHandler("search", search_command))
+        application.add_handler(CommandHandler("niche", niche_command))
+        application.add_handler(CommandHandler("compare", compare_command))
+        application.add_handler(CommandHandler("rules", rules_command))
+        application.add_handler(CommandHandler("requirements", requirements_command))
+        application.add_handler(CommandHandler("flairs", flairs_command))
+        application.add_handler(CommandHandler("scrape", scrape_command))
+
+        # ===== ADMIN COMMANDS =====
+        application.add_handler(CommandHandler("admin", admin_command))
+        application.add_handler(CommandHandler("users", users_command))
+        application.add_handler(CommandHandler("stats", stats_command))
+        application.add_handler(CommandHandler("addcoins", add_coins_command))
+        application.add_handler(CommandHandler("setcoins", set_coins_command))
+        application.add_handler(CommandHandler("makeadmin", makeadmin_command))
+        application.add_handler(CommandHandler("removeadmin", removeadmin_command))
+        application.add_handler(CommandHandler("announce", announce_command))
+        application.add_handler(CommandHandler("discover", discover_command))
+        application.add_handler(CommandHandler("broadcast", broadcast_command))
+
+        # Callback query handler for inline buttons
+        application.add_handler(CallbackQueryHandler(button_callback))
 
     # Initialize database (Supabase doesn't need DATABASE_URL parameter)
     if db is None:
+        logger.info("Initializing database...")
         db = Database()
         await db.init_pool()
 
     # Initialize Reddit API and AI Analyzer
     if reddit_api is None:
+        logger.info("Initializing Reddit API...")
         reddit_api = RedditAPI(REDDIT_API_URL)
 
     if ai_analyzer is None and OPENAI_API_KEY:
+        logger.info("Initializing AI Analyzer...")
         ai_analyzer = OpenAIAnalyzer(OPENAI_API_KEY)
 
-    # ===== BASIC COMMANDS =====
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("balance", balance_command))
-    application.add_handler(CommandHandler("buy", buy_command))
-
-    # ===== ANALYSIS COMMANDS =====
-    application.add_handler(CommandHandler("analyze", analyze_command))
-    application.add_handler(CommandHandler("search", search_command))
-    application.add_handler(CommandHandler("niche", niche_command))
-    application.add_handler(CommandHandler("compare", compare_command))
-    application.add_handler(CommandHandler("rules", rules_command))
-    application.add_handler(CommandHandler("requirements", requirements_command))
-    application.add_handler(CommandHandler("flairs", flairs_command))
-    application.add_handler(CommandHandler("scrape", scrape_command))
-
-    # ===== ADMIN COMMANDS =====
-    application.add_handler(CommandHandler("admin", admin_command))
-    application.add_handler(CommandHandler("users", users_command))
-    application.add_handler(CommandHandler("stats", stats_command))
-    application.add_handler(CommandHandler("addcoins", add_coins_command))
-    application.add_handler(CommandHandler("setcoins", set_coins_command))
-    application.add_handler(CommandHandler("makeadmin", makeadmin_command))
-    application.add_handler(CommandHandler("removeadmin", removeadmin_command))
-    application.add_handler(CommandHandler("announce", announce_command))
-    application.add_handler(CommandHandler("discover", discover_command))
-    application.add_handler(CommandHandler("broadcast", broadcast_command))
-
-    # Callback query handler for inline buttons
-    application.add_handler(CallbackQueryHandler(button_callback))
-
-    # Initialize application (webhook mode - don't start update fetcher)
-    await application.initialize()
+    # Initialize application once (webhook mode - don't start update fetcher)
+    if not _app_initialized:
+        logger.info("Initializing Telegram application...")
+        await application.initialize()
+        _app_initialized = True
 
     return application
 
