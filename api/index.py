@@ -158,15 +158,19 @@ def run_async(coro):
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        return loop.run_until_complete(coro)
+        result = loop.run_until_complete(coro)
+
+        # Wait for any remaining tasks to complete before closing
+        # This prevents "Event loop is closed" errors with Telegram
+        pending = asyncio.all_tasks(loop)
+        if pending:
+            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+
+        return result
     finally:
-        if loop:
+        if loop and not loop.is_closed():
             try:
-                # Clean up any pending tasks
-                pending = asyncio.all_tasks(loop)
-                for task in pending:
-                    task.cancel()
-                # Close the loop properly
+                # Close the loop after all tasks are done
                 loop.close()
             except Exception as e:
                 logger.warning(f"Error closing event loop: {e}")
