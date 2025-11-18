@@ -120,12 +120,12 @@ def test_bot_import():
 def database_health():
     """Check database connectivity"""
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        database = loop.run_until_complete(get_db())
+        async def check_db():
+            database = await get_db()
+            stats = await database.get_bot_statistics()
+            return stats
 
-        # Test database query
-        stats = loop.run_until_complete(database.get_bot_statistics())
+        stats = run_async(check_db())
 
         return jsonify({
             'status': 'healthy',
@@ -396,60 +396,57 @@ def stripe_webhook():
 
             logger.info(f"Processing payment for user {user_id}, {total_coins} coins")
 
-            # Add coins to user
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            database = loop.run_until_complete(get_db())
+            async def process_payment():
+                database = await get_db()
 
-            success = loop.run_until_complete(
-                database.add_coins(
+                success = await database.add_coins(
                     user_id=user_id,
                     amount=total_coins,
                     transaction_type='purchase',
                     description=f"Purchased {package_name}",
                     extend_expiry=True
                 )
-            )
 
-            if success:
-                logger.info(f"Successfully added {total_coins} coins to user {user_id}")
+                if success:
+                    logger.info(f"Successfully added {total_coins} coins to user {user_id}")
 
-                # Update payment history
-                loop.run_until_complete(
-                    database.update_payment_status(
+                    # Update payment history
+                    await database.update_payment_status(
                         session_id=session['id'],
                         status='completed',
                         payment_intent=session.get('payment_intent')
                     )
-                )
 
-                # Send notification to user via Telegram
-                try:
-                    telegram_token = os.getenv('TELEGRAM_BOT_TOKEN')
-                    bot = Bot(token=telegram_token)
+                    # Send notification to user via Telegram
+                    try:
+                        telegram_token = os.getenv('TELEGRAM_BOT_TOKEN')
+                        bot = Bot(token=telegram_token)
 
-                    # Get user's new balance
-                    user_coins = loop.run_until_complete(database.get_user_coins(user_id))
+                        # Get user's new balance
+                        user_coins = await database.get_user_coins(user_id)
 
-                    message = (
-                        f"✅ <b>Payment Successful!</b>\n\n"
-                        f"🪙 {total_coins} coins have been added to your account!\n"
-                        f"💰 New balance: {user_coins['balance']} coins\n\n"
-                        f"Use /balance to check your balance."
-                    )
+                        message = (
+                            f"✅ <b>Payment Successful!</b>\n\n"
+                            f"🪙 {total_coins} coins have been added to your account!\n"
+                            f"💰 New balance: {user_coins['balance']} coins\n\n"
+                            f"Use /balance to check your balance."
+                        )
 
-                    loop.run_until_complete(
-                        bot.send_message(
+                        await bot.send_message(
                             chat_id=user_id,
                             text=message,
                             parse_mode='HTML'
                         )
-                    )
-                    logger.info(f"Notification sent to user {user_id}")
-                except Exception as e:
-                    logger.error(f"Failed to notify user: {e}")
-            else:
-                logger.error(f"Failed to add coins to user {user_id}")
+                        logger.info(f"Notification sent to user {user_id}")
+                    except Exception as e:
+                        logger.error(f"Failed to notify user: {e}")
+                    return True
+                else:
+                    logger.error(f"Failed to add coins to user {user_id}")
+                    return False
+
+            success = run_async(process_payment())
+            if not success:
                 return jsonify({'error': 'Failed to add coins'}), 500
 
             return jsonify({'received': True}), 200
@@ -459,17 +456,14 @@ def stripe_webhook():
             session = event['data']['object']
             logger.info(f"Payment failed: {session.get('id')}")
 
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            database = loop.run_until_complete(get_db())
-
-            loop.run_until_complete(
-                database.update_payment_status(
+            async def process_failed_payment():
+                database = await get_db()
+                await database.update_payment_status(
                     session_id=session.get('id'),
                     status='failed'
                 )
-            )
 
+            run_async(process_failed_payment())
             return jsonify({'received': True}), 200
 
         return jsonify({'received': True}), 200
@@ -488,39 +482,34 @@ def stripe_webhook():
 
 # ========== TELEGRAM BOT WEBHOOK ENDPOINT ==========
 
+# Import bot handler at module level for performance
+try:
+    # Add api directory to path for Vercel serverless environment
+    api_dir = os.path.dirname(__file__)
+    if api_dir not in sys.path:
+        sys.path.insert(0, api_dir)
+
+    from bot_handler import process_update
+    logger.info("Bot handler imported at module level")
+except ImportError as e:
+    logger.error(f"Failed to import bot_handler at module level: {e}")
+    process_update = None
+
 @app.route('/webhook', methods=['POST'])
 def telegram_webhook():
     """Handle Telegram bot webhooks"""
-    loop = None
     try:
+        # Check if bot_handler was imported successfully
+        if process_update is None:
+            logger.error("Bot handler not available")
+            return jsonify({'ok': False, 'error': 'Bot handler not available'}), 500
+
         # Get the webhook update
         update_data = request.get_json()
         logger.info(f"Received Telegram webhook update")
 
-        # Create and set event loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        # Import bot application
-        try:
-            # Add api directory to path for Vercel serverless environment
-            api_dir = os.path.dirname(__file__)
-            if api_dir not in sys.path:
-                sys.path.insert(0, api_dir)
-
-            from bot_handler import process_update
-            logger.info("Bot handler imported successfully")
-        except ImportError as e:
-            logger.error(f"Failed to import bot_handler: {e}")
-            logger.error(f"sys.path: {sys.path}")
-            logger.error(f"__file__: {__file__}")
-            return jsonify({'ok': False, 'error': 'Import error'}), 500
-
-        # Process the update
-        logger.info("Processing update...")
-        result = loop.run_until_complete(
-            process_update(update_data)
-        )
+        # Process the update using run_async helper
+        result = run_async(process_update(update_data))
         logger.info(f"Update processed successfully: {result}")
 
         return jsonify({'ok': True}), 200
@@ -530,8 +519,6 @@ def telegram_webhook():
         # Return 200 to prevent Telegram from retrying
         # Log the error but don't fail the webhook
         return jsonify({'ok': True, 'error_logged': str(e)}), 200
-    # Note: Don't close event loop - it causes "Event loop is closed" errors
-    # The loop will be garbage collected after the function returns
 
 # ========== USER & COIN MANAGEMENT ENDPOINTS ==========
 
@@ -539,11 +526,11 @@ def telegram_webhook():
 def get_user_coins(user_id):
     """Get user coin balance"""
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        database = loop.run_until_complete(get_db())
+        async def get_coins():
+            database = await get_db()
+            return await database.get_user_coins(user_id)
 
-        coins = loop.run_until_complete(database.get_user_coins(user_id))
+        coins = run_async(get_coins())
         return jsonify(coins)
     except Exception as e:
         logger.error(f"Error getting user coins: {e}")
@@ -560,25 +547,26 @@ def add_coins():
         description = data.get('description')
         extend_expiry = data.get('extend_expiry', True)
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        database = loop.run_until_complete(get_db())
-
-        success = loop.run_until_complete(
-            database.add_coins(
+        async def add_coins_async():
+            database = await get_db()
+            success = await database.add_coins(
                 user_id, amount, transaction_type,
                 description, extend_expiry
             )
-        )
+            if success:
+                coins = await database.get_user_coins(user_id)
+                return {
+                    'success': True,
+                    'new_balance': coins['balance']
+                }
+            else:
+                return {'success': False}
 
-        if success:
-            coins = loop.run_until_complete(database.get_user_coins(user_id))
-            return jsonify({
-                'success': True,
-                'new_balance': coins['balance']
-            })
+        result = run_async(add_coins_async())
+        if result.get('success'):
+            return jsonify(result)
         else:
-            return jsonify({'success': False}), 400
+            return jsonify(result), 400
 
     except Exception as e:
         logger.error(f"Error adding coins: {e}")
@@ -594,22 +582,23 @@ def deduct_coins():
         command = data.get('command', 'unknown')
         description = data.get('description')
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        database = loop.run_until_complete(get_db())
+        async def deduct_coins_async():
+            database = await get_db()
+            success = await database.deduct_coins(user_id, amount, command, description)
+            if success:
+                coins = await database.get_user_coins(user_id)
+                return {
+                    'success': True,
+                    'new_balance': coins['balance']
+                }
+            else:
+                return {'success': False}
 
-        success = loop.run_until_complete(
-            database.deduct_coins(user_id, amount, command, description)
-        )
-
-        if success:
-            coins = loop.run_until_complete(database.get_user_coins(user_id))
-            return jsonify({
-                'success': True,
-                'new_balance': coins['balance']
-            })
+        result = run_async(deduct_coins_async())
+        if result.get('success'):
+            return jsonify(result)
         else:
-            return jsonify({'success': False}), 400
+            return jsonify(result), 400
 
     except Exception as e:
         logger.error(f"Error deducting coins: {e}")
@@ -626,14 +615,11 @@ def create_user():
         last_name = data.get('last_name')
         added_by = data.get('added_by')
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        database = loop.run_until_complete(get_db())
+        async def create_user_async():
+            database = await get_db()
+            return await database.add_user(user_id, username, first_name, last_name, added_by)
 
-        success = loop.run_until_complete(
-            database.add_user(user_id, username, first_name, last_name, added_by)
-        )
-
+        success = run_async(create_user_async())
         return jsonify({'success': success})
     except Exception as e:
         logger.error(f"Error creating user: {e}")
@@ -643,11 +629,11 @@ def create_user():
 def get_all_users():
     """Get all users"""
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        database = loop.run_until_complete(get_db())
+        async def get_users():
+            database = await get_db()
+            return await database.get_all_users()
 
-        users = loop.run_until_complete(database.get_all_users())
+        users = run_async(get_users())
         return jsonify(users)
     except Exception as e:
         logger.error(f"Error getting users: {e}")
